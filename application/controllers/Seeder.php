@@ -36,7 +36,7 @@ class Seeder extends CI_Controller
                 'PlaceOfBirth' => 'Malang',
                 'DateOfBirth' => '1990-01-01',
                 'Address' => 'Jl. Test No. 123',
-                'NoHp' => '087898512328', // Default dummy, user should update this in DB if they want to test real WA
+                'NoHp' => '08xxxxxx', // Default dummy, user should update this in DB if they want to test real WA
                 'RegisterDate' => date('Y-m-d'),
                 'EndDate' => date('Y-m-d', strtotime('+1 year')),
                 'StatusAnggota_id' => 1, // Assuming 1 is active
