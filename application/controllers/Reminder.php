@@ -24,8 +24,8 @@ class Reminder extends CI_Controller
         $log_entry = "[$timestamp] START PROCESS";
         write_file($log_file, $log_entry . "\n", 'a+');
 
-        // 1. Get Loans Due Today (or past due)
-        $today = date('Y-m-d');
+        // 1. Get Loans Due Today OR Upcoming (H-7)
+        $threshold = date('Y-m-d', strtotime('+7 days'));
 
         $this->db->select('cli.ID as LoanItemID, cli.DueDate, m.Fullname, m.NoHp, cat.Title');
         $this->db->from('collectionloanitems cli');
@@ -33,21 +33,22 @@ class Reminder extends CI_Controller
         $this->db->join('collections c', 'c.ID = cli.Collection_id');
         $this->db->join('catalogs cat', 'cat.ID = c.Catalog_id');
         $this->db->where('cli.LoanStatus', 'Loan');
-        $this->db->where('cli.DueDate <=', $today);
+        $this->db->where('cli.DueDate <=', $threshold);
 
         $query = $this->db->get();
         $results = $query->result();
 
         if (empty($results)) {
-            echo "<div style='color:green'>✅ Tidak ada pinjaman jatuh tempo hari ini.</div>";
-            write_file($log_file, "[$timestamp] SKIP: No loans due.\n", 'a+');
+            echo "<div style='color:green'>✅ Tidak ada pinjaman jatuh tempo atau mendekati jatuh tempo.</div>";
+            write_file($log_file, "[$timestamp] SKIP: No loans found.\n", 'a+');
             return;
         }
 
-        echo "Found " . count($results) . " loans due.<br><br>";
+        echo "Found " . count($results) . " loans (Due or Upcoming).<br><br>";
 
         $success_count = 0;
         $fail_count = 0;
+        $todayStr = date('Y-m-d');
 
         foreach ($results as $row) {
             if (empty($row->NoHp)) {
@@ -55,11 +56,25 @@ class Reminder extends CI_Controller
                 continue;
             }
 
-            // Pesan
+            // Determine Message Context (Overdue vs Upcoming)
+            $isOverdue = ($row->DueDate < $todayStr);
+            $isToday = ($row->DueDate == $todayStr);
+
             $message = "Halo " . $row->Fullname . ",\n\n";
-            $message .= "Kami mengingatkan bahwa buku *'" . $row->Title . "'* yang Anda pinjam jatuh tempo pada tanggal *" . $row->DueDate . "*.\n";
-            $message .= "Mohon segera dikembalikan ke perpustakaan.\n\n";
-            $message .= "Terima kasih.";
+            $message .= "Ini adalah pengingat otomatis dari Perpustakaan.\n";
+
+            if ($isOverdue) {
+                $message .= "⚠️ Buku *'" . $row->Title . "'* yang Anda pinjam telah **LEWAT JATUH TEMPO** pada tanggal *" . $row->DueDate . "*.\n";
+                $message .= "Mohon SEGERA dikembalikan untuk menghindari denda.\n";
+            } elseif ($isToday) {
+                $message .= "⚠️ Buku *'" . $row->Title . "'* jatuh tempo **HARI INI** (" . $row->DueDate . ").\n";
+                $message .= "Mohon segera dikembalikan hari ini.\n";
+            } else {
+                $message .= "ℹ️ Buku *'" . $row->Title . "'* akan jatuh tempo pada tanggal *" . $row->DueDate . "*.\n";
+                $message .= "Silakan persiapkan pengembalian sebelum tanggal tersebut.\n";
+            }
+
+            $message .= "\nTerima kasih.";
 
             echo "Sending to <b>" . $row->Fullname . "</b> (" . $row->NoHp . ")... ";
 
